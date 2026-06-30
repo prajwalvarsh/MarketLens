@@ -199,9 +199,9 @@ rather than a gap:
 
 ## Disclaimer
 
-MarketLens produces research reports, not trading advice. Nothing it
+**MarketLens produces research reports, not trading advice. Nothing it
 outputs should be treated as a recommendation to buy or sell any
-security. Always do your own research.
+security. Always do your own research.**
 
 ---
 
