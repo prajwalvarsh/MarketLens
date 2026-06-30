@@ -41,6 +41,12 @@ the human acts.
 - Container: Docker
 - Orchestration: Kubernetes (minikube locally, GKE in cloud)
 - CI/CD: GitHub Actions
+- Delivery surfaces: MCP server (exposes MarketLens as an `analyse_stock`
+  tool for MCP-compatible AI clients) + Telegram (optional report
+  delivery via `notify="telegram"`, routed through a Telegram MCP
+  server / Bot API integration). Both are thin layers on top of the
+  existing `/analyse` endpoint — no agent logic is duplicated. See
+  dev.md "Delivery Surfaces" section.
 
 ---
 
@@ -87,6 +93,11 @@ Read all of these before starting any sprint:
 10. There is no local/self-hosted LLM backend in this project. Do not
     add vLLM, Ollama, or any GPU-dependent inference path unless the
     spec is explicitly updated first.
+11. `delivery/` and `mcp_server/` must never import from `agents/`,
+    `graph/`, or `state.py`. They consume only the finished `Report`
+    schema returned by the API. A delivery failure must never cause
+    `/analyse` to return a non-200 response for an otherwise
+    successful analysis.
 
 ---
 
@@ -145,6 +156,19 @@ uv run pytest tests/evals/ -v -s \
 curl http://localhost:8080/trace/<run_id>
 ```
 
+### Run the MCP server locally (Sprint 8)
+```
+cd mcp_server
+uv run server.py
+```
+
+### Test Telegram delivery (Sprint 8, requires TELEGRAM_BOT_TOKEN)
+```
+curl -X POST http://localhost:8080/analyse \
+  -H "Content-Type: application/json" \
+  -d '{"symbol": "RELIANCE", "period": "3mo", "notify": "telegram", "chat_id": "<your_chat_id>"}'
+```
+
 ### Local dev
 ```
 docker compose up
@@ -175,6 +199,13 @@ USE_MOCK_DATA=false
 EVAL_JUDGE_MODEL=deepseek/deepseek-v4-flash
 EVAL_SCORE_THRESHOLD=3.5
 TRACE_OUTPUT_DIR=eval_results/traces
+TELEGRAM_BOT_TOKEN=your-bot-token-here
+```
+
+`mcp_server/` reads its own small `.env` (separate from the main app):
+
+```
+AGENT_API_BASE_URL=http://localhost:8080
 ```
 
 ---
@@ -184,7 +215,7 @@ TRACE_OUTPUT_DIR=eval_results/traces
 Sprint 0 — specs complete, no code written yet.
 
 Update this section after every sprint review. See product.md for the
-full 7-sprint breakdown.
+full 8-sprint breakdown.
 
 ---
 
@@ -200,3 +231,19 @@ full 7-sprint breakdown.
 8. Update `tests/integration/test_graph.py` mock fixtures
 9. Ensure the node emits both a structured log entry and a trace span
 10. Run full test suite — must pass at 80% coverage
+
+---
+
+## Adding a New Delivery Channel
+
+1. Create `delivery/your_channel.py` — formats `Report` + sends
+2. Add a formatter function to `delivery/formatters.py` if shared
+   formatting logic is needed across channels
+3. Extend the `notify` enum in `api/models.py` to include the new value
+4. Add unit tests for message formatting in `tests/unit/`
+5. Add integration tests for success + failure paths in `tests/integration/`,
+   mocking the underlying send call
+6. Confirm the new channel's failure cannot cause `/analyse` to return
+   a non-200 — this is a hard architecture rule, not optional
+7. Do not import anything from `agents/`, `graph/`, or `state.py`
+   into the new delivery module

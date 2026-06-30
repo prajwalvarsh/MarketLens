@@ -91,6 +91,14 @@ file per request, retrievable via `GET /trace/{run_id}`. Enough to
 debug a single-request system and to prove the parallel fan-out claim
 above, without standing up infrastructure the workload doesn't need.
 
+**Three delivery surfaces, one analysis engine.** The same agent
+pipeline is consumable as a REST API, a static web page, an MCP tool
+callable from Claude Desktop or any other MCP-compatible client, and
+an optional Telegram message. None of these surfaces duplicate agent
+logic — they're thin wrappers around `/analyse`, and a failure in any
+one of them (e.g. a Telegram send failing) never affects the others.
+See [`specs/dev.md`](specs/dev.md#delivery-surfaces).
+
 ---
 
 ## Quick Start
@@ -115,6 +123,25 @@ To inspect exactly what happened during a run:
 
 ```bash
 curl http://localhost:8080/trace/<run_id>
+```
+
+### Using it from Claude Desktop (MCP)
+
+```bash
+cd mcp_server
+echo "AGENT_API_BASE_URL=http://localhost:8080" > .env
+```
+
+Add to Claude Desktop's local MCP config, restart, then just ask:
+"analyse RELIANCE for me." Full setup steps in
+[`specs/deploy.md`](specs/deploy.md#connecting-the-mcp-server-sprint-8-local-only).
+
+### Getting a report on Telegram
+
+```bash
+curl -X POST http://localhost:8080/analyse \
+  -H "Content-Type: application/json" \
+  -d '{"symbol": "RELIANCE", "period": "3mo", "notify": "telegram", "chat_id": "<your_chat_id>"}'
 ```
 
 ### Running on Kubernetes
@@ -146,6 +173,7 @@ Full deployment steps, CI/CD pipeline, and rollback procedure in
 | Orchestration | Kubernetes (HPA, health probes, rolling updates) |
 | CI/CD | GitHub Actions |
 | Data | yfinance, nsetools, Economic Times RSS, newsdata.io — all free, no scraping |
+| Delivery | MCP server (`analyse_stock` tool for AI clients) + Telegram (optional, via MCP) |
 
 ---
 
@@ -165,6 +193,8 @@ marketlens/
 ├── observability/      ← structured logging + request tracing
 ├── api/                ← FastAPI routes
 ├── static/             ← single-page demo UI, no framework
+├── delivery/           ← Telegram report delivery, decoupled from agent logic
+├── mcp_server/         ← exposes MarketLens as an MCP tool for AI clients
 ├── tests/               ← unit / integration / evals / fixtures
 └── k8s/                 ← Kubernetes manifests
 ```
@@ -204,4 +234,3 @@ outputs should be treated as a recommendation to buy or sell any
 security. Always do your own research.**
 
 ---
-
